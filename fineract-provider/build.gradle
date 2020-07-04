@@ -20,9 +20,15 @@ description = '''\
 Run as:
 gradle clean bootRun'''
 
-project.ext.jerseyVersion = '1.19.4'
-ext["groovy.version"] = '3.0.3'
+group = 'org.apache.fineract'
 
+repositories {
+    jcenter()
+}
+
+//
+// PLUGINS
+//
 
 buildscript {
     ext {
@@ -36,11 +42,10 @@ buildscript {
 
     dependencies {
         classpath 'io.spring.gradle:dependency-management-plugin:1.0.9.RELEASE'
-        classpath 'com.bmuschko:gradle-cargo-plugin:2.7.1',
-            'nl.javadude.gradle.plugins:license-gradle-plugin:0.11.0',
-            'org.zeroturnaround:gradle-jrebel-plugin:1.1.10',
-            'org.springframework.boot:spring-boot-gradle-plugin:2.2.7.RELEASE'
-        // below
+        classpath 'com.bmuschko:gradle-cargo-plugin:2.7.1'
+        classpath 'gradle.plugin.com.hierynomus.gradle.plugins:license-gradle-plugin:0.15.0'
+        classpath 'org.zeroturnaround:gradle-jrebel-plugin:1.1.10'
+        classpath 'org.springframework.boot:spring-boot-gradle-plugin:2.3.1.RELEASE'
         classpath 'org.apache.openjpa:openjpa:3.1.1' // when upgrading, also change OpenJPA version repeated below in dependencyManagement!
         classpath 'com.radcortez.gradle:openjpa-gradle-plugin:3.1.0'
         classpath 'org.nosphere.apache:creadur-rat-gradle:0.7.0'
@@ -56,7 +61,7 @@ buildscript {
 apply plugin: 'io.spring.dependency-management'
 apply plugin: "org.nosphere.apache.rat"
 apply plugin: 'rebel'
-apply plugin: 'license'
+apply plugin: 'com.github.hierynomus.license'
 apply plugin: 'war'
 apply plugin: 'org.springframework.boot'
 apply plugin: 'eclipse'
@@ -73,6 +78,13 @@ apply plugin: "com.gorylenko.gradle-git-properties"
 apply plugin: "net.ltgt.errorprone"
 apply plugin: "com.diffplug.gradle.spotless"
 apply plugin: "io.swagger.core.v3.swagger-gradle-plugin"
+
+//
+// DEPENDENCIES
+//
+
+project.ext.jerseyVersion = '1.19.4'
+ext["groovy.version"] = '3.0.4'
 
 dependencyManagement {
     imports {
@@ -152,205 +164,27 @@ dependencyManagement {
     }
 }
 
+apply from: 'dependencies.gradle'
+/* TODO https://issues.apache.org/jira/browse/FINERACT-939 (dev-dependencies.gradle has been removed, as totally broken)
+ // Pick up dependencies based on the environment, defaults to production
+ if (project.hasProperty('env') && project.getProperty('env') == 'dev') {
+ apply from:  'dev-dependencies.gradle'
+ }  else {
+ apply from: 'dependencies.gradle'
+ }
+ */
+
+
+//
+// CONFIGURATION FOR JAVA COMPILATION
+//
+
 /* define the valid syntax level for source files */
 sourceCompatibility = JavaVersion.VERSION_11
 /* define binary compatibility version */
 targetCompatibility = JavaVersion.VERSION_11
 
-project.ext.mysqlUser='root'
-project.ext.mysqlPassword='mysql'
-
-group = 'org.apache.fineract'
 buildDir = new File(rootProject.projectDir, "../build")
-repositories {
-    jcenter()
-    // mavenLocal() // useful for local dev using MariaDB4j SNAPSHOTs (not needed for real-world non-SNAPHOT builds)
-}
-
-// If we are running Gradle within Eclipse to enhance classes with OpenJPA,
-// set the classes directory to point to Eclipse's default build directory
-if (project.hasProperty('env') && project.getProperty('env') == 'eclipse')
-{
-    sourceSets.main.java.outputDir = new File(rootProject.projectDir, "bin/main")
-}
-
-eclipse
-{
-    project {
-        buildCommand([ LaunchConfigHandle: "<project>/.externalToolBuilders/OpenJPA Enhance Builder.launch" ],  'org.eclipse.ui.externaltools.ExternalToolBuilder')
-    }
-}
-
-System.setProperty("openjpa.Log", "commons")
-
-openjpa {
-    includes = ['**/AbstractPersistableCustom.class', '**/domain/*.class']
-    enhance {
-        enforcePropertyRestrictions true
-    }
-}
-
-// Configuration for Swagger documentation generation task
-// https://github.com/swagger-api/swagger-core/tree/master/modules/swagger-gradle-plugin
-resolve {
-    logging.captureStandardOutput LogLevel.INFO
-    outputFileName = 'fineract'
-    outputFormat = 'JSON'
-    prettyPrint = 'TRUE'
-    classpath = sourceSets.main.runtimeClasspath
-    outputDir = file("${buildDir}/classes/java/main/static/swagger-ui")
-}
-
-// Configuration for JaCoCo code coverage task
-// https://www.eclemma.org/jacoco/
-jacoco {
-    toolVersion = jacocoVersion
-    reportsDir = file("$buildDir/reports/jacoco")
-
-}
-
-jacocoTestReport{
-    reports{
-        html.enabled=true
-        xml.enabled=true
-        html.destination file("${buildDir}/code-coverage")
-    }
-}
-
-spotless {
-  format 'misc', {
-   target '**/*.md', '**/*.properties', '**/*.gradle', '**/.gitignore', '**/*.yml', '**/*.xml', '**/**.json', '**/*.sql'
-   targetExclude '**/build/**', '**/bin/**', '**/.settings/**','**/.idea/**'
-   indentWithSpaces(4)
-   endWithNewline()
-   trimTrailingWhitespace()
-  }
-
-  java {
-    importOrder() //sort imports alphabetically
-    removeUnusedImports()
-    eclipse().configFile '../config/fineractdev-formatter.xml'
-    endWithNewline()
-    trimTrailingWhitespace()
-
-    // Enforce style modifier order
-      custom 'Modifier ordering', {
-        def modifierRanking = [
-                public      : 1,
-                protected   : 2,
-                private     : 3,
-                abstract    : 4,
-                default     : 5,
-                static      : 6,
-                final       : 7,
-                transient   : 8,
-                volatile    : 9,
-                synchronized: 10,
-                native      : 11,
-                strictfp    : 12]
-        // Find any instance of multiple modifiers. Lead with a non-word character to avoid
-        // accidental matching against for instance, "an alternative default value"
-        it.replaceAll(/\W(?:public |protected |private |abstract |default |static |final |transient |volatile |synchronized |native |strictfp ){2,}/, {
-          // Do not replace the leading non-word character.  Identify the modifiers
-          it.replaceAll(/(?:public |protected |private |abstract |default |static |final |transient |volatile |synchronized |native |strictfp ){2,}/, {
-            // Sort the modifiers according to the ranking above
-            it.split().sort({ modifierRanking[it] }).join(' ') + ' '
-          }
-          )
-        }
-        )
-      }
-
-  }
-
-    lineEndings 'UNIX'
-}
-
-// Configuration for Apache Release Audit Tool task
-// https://github.com/eskatos/creadur-rat-gradle
-rat {
-    verbose = false
-    reportDir = new File(buildDir,'reports/rat')
-    excludes = [
-        '**/*.launch',
-        '**/licenses/**',
-        '**/*.md',
-        '**/*.github/**',
-        '**/MANIFEST.MF',
-        '**/*.json',
-        '**/*.txt',
-        '**/*.log',
-        '**/fineractdev-eclipse-preferences.epf',
-        '**/template-expected.html',
-        '**/template.mustache',
-        '**/.classpath',
-        '**/.project',
-        '**/.idea/**',
-        '**/*.ipr',
-        '**/*.iws',
-        '**/.settings/**',
-        '**/bin/**',
-        '**/.git/**',
-        '**/.gitignore',
-        '**/.gitkeep',
-        '**/*.iml',
-        //Notice files
-        '**/NOTICE_RELEASE',
-        '**/NOTICE_SOURCE',
-        // Swagger License
-        '**/src/main/resources/static/swagger-ui/**',
-        // gradle
-        '**/.gradle/**',
-        '**/gradlew',
-        '**/gradlew.bat',
-        '**/gradle/wrapper/gradle-wrapper.properties',
-        '**/caches/**',
-        '**/daemon/**',
-        '**/native/**',
-        '**/wrapper/**',
-        '**/build/**',
-
-        //Api Docs
-        '**/api-docs/*.*',
-        '**/docs/system-architecture/.htaccess',
-        '**/docs/system-architecture/404.html',
-        '**/docs/system-architecture/index.html',
-        '**/docs/system-architecture/**/*.xml',
-        '**/bootstrap-3.0.0/assets/application.js',
-        '**/system-architecture/js/plugins.js',
-
-        //Apache License
-        '**/bootstrap-3.0.0/assets/less.js',
-        '**/css/bootstrap-3.0.0/**/*.*',
-
-        //Public Domain See http://www.JSON.org/js.html
-        '**/bootstrap-3.0.0/assets/json2.js.htm',
-
-        // MIT License
-        '**/modernizr-2.6.2.min.js',
-        '**/css/normalize.css',
-        '**/assets/filesaver.js',
-        '**/css/fonts/glyphicons-halflings-regular.svg',
-        '**/assets/jszip.js',
-        '**/assets/jquery.js',
-        '**/api-docs/jquery-1.7.min.js',
-        '**/css/toc-0.1.2/**/*.*',
-        '**/docs/system-architecture/css/main.css',
-        '**/system-architecture/js/vendor/jquery-1.9.1.min.js',
-        '**/system-architecture/js/vendor/toc-0.1.2/jquery.toc.min.js',
-        '**/assets/respond.min.js',
-        '**/assets/html5shiv.js',
-
-        //BSD License
-        '**/assets/uglify.js',
-        //Ignore out folder
-        '**/out/**',
-
-        // Git build info
-        "**/git.properties",
-    ]
-}
-
 configurations {
     providedRuntime // needed for Spring Boot executable WAR
     providedCompile
@@ -374,13 +208,34 @@ configurations {
 }
 
 tasks.withType(JavaCompile) {
-    options.compilerArgs += ["-Xlint:unchecked","-Xlint:cast","-Xlint:auxiliaryclass","-Xlint:deprecation",
-                             "-Xlint:dep-ann","-Xlint:divzero","-Xlint:empty","-Xlint:exports","-Xlint:fallthrough",
-                             "-Xlint:finally","-Xlint:module","-Xlint:opens","-Xlint:options","-Xlint:overloads",
-                             "-Xlint:overrides","-Xlint:path","-Xlint:processing","-Xlint:removal",
-                             "-Xlint:requires-automatic","-Xlint:requires-transitive-automatic","-Xlint:try",
-                             "-Xlint:varargs","-Xlint:preview","-Xlint:static","-Werror"]
-                            // TODO FINERACT-959 (gradually) enable -Xlint:all (see "javac -help -X")
+    options.compilerArgs += [
+        "-Xlint:unchecked",
+        "-Xlint:cast",
+        "-Xlint:auxiliaryclass",
+        "-Xlint:deprecation",
+        "-Xlint:dep-ann",
+        "-Xlint:divzero",
+        "-Xlint:empty",
+        "-Xlint:exports",
+        "-Xlint:fallthrough",
+        "-Xlint:finally",
+        "-Xlint:module",
+        "-Xlint:opens",
+        "-Xlint:options",
+        "-Xlint:overloads",
+        "-Xlint:overrides",
+        "-Xlint:path",
+        "-Xlint:processing",
+        "-Xlint:removal",
+        "-Xlint:requires-automatic",
+        "-Xlint:requires-transitive-automatic",
+        "-Xlint:try",
+        "-Xlint:varargs",
+        "-Xlint:preview",
+        "-Xlint:static",
+        "-Werror"
+    ]
+    // TODO FINERACT-959 (gradually) enable -Xlint:all (see "javac -help -X")
 
     options.deprecation = true
     options.errorprone {
@@ -396,7 +251,7 @@ tasks.withType(JavaCompile) {
                 "ReturnFromVoid",
                 "AlmostJavadoc",
                 "InvalidBlockTag",
-        )
+                )
         //TODO gradually enable these checks
         error(
                 "DefaultCharset",
@@ -468,28 +323,46 @@ tasks.withType(JavaCompile) {
                 "ModifiedButNotUsed",
                 "InconsistentCapitalization",
                 "MissingOverride",
-//                "InvalidBlockTag",
-//                "InconsistentOverloads",
-//                "MethodCanBeStatic",
-//                "Var",
-//                "ConstantField",
-//                "UnnecessaryDefaultInEnumSwitch",
-//                "FieldCanBeFinal"
-        )
+                //                "InvalidBlockTag",
+                //                "InconsistentOverloads",
+                //                "MethodCanBeStatic",
+                //                "Var",
+                //                "ConstantField",
+                //                "UnnecessaryDefaultInEnumSwitch",
+                //                "FieldCanBeFinal"
+                )
     }
-    options.compilerArgs +=["-Xmaxwarns",1500,"-Xmaxerrs",1500]
+    options.compilerArgs +=[
+        "-Xmaxwarns",
+        1500,
+        "-Xmaxerrs",
+        1500
+    ]
 
 }
 
-apply from: 'dependencies.gradle'
-/* TODO https://issues.apache.org/jira/browse/FINERACT-939 (dev-dependencies.gradle has been removed, as totally broken)
-// Pick up dependencies based on the environment, defaults to production
-if (project.hasProperty('env') && project.getProperty('env') == 'dev') {
-    apply from:  'dev-dependencies.gradle'
-}  else {
-    apply from: 'dependencies.gradle'
+compileJava {
+    dependsOn rat
+    dependsOn spotlessCheck
+    finalizedBy resolve
 }
-*/
+
+/* Exclude maria db related files for non dev builds */
+if (!(project.hasProperty('env') && project.getProperty('env') == 'dev')) {
+    sourceSets {
+        main {
+            java {
+                exclude '**/ServerWithMariaDB*'
+                exclude '**/MariaDB4j*'
+            }
+        }
+        test {
+            java {
+                exclude '**/core/boot/tests/**'
+            }
+        }
+    }
+}
 
 /* Enable Oauth2 authentication based on environment, default to HTTP basic auth */
 if (project.hasProperty('security') && project.getProperty('security') == 'oauth') {
@@ -522,140 +395,56 @@ if (project.hasProperty('security') && project.getProperty('security') == 'oauth
     }
 }
 
-modernizer {
-    includeTestClasses = true
-    failOnViolations = true
+//
+// CONFIGURATION FOR PACKAGING TASKS
+//
 
-    violationLogLevel="error"
-
-    javaVersion = project.targetCompatibility
-
-    ignorePackages = []
-    ignoreClassNamePatterns = [
-        '.*AbstractPersistableCustom',
-        '.*EntityTables'
-    ]
-    ignoreGeneratedClasses = true
-
-    exclusions = []
-    exclusionPatterns = [
-    // To be removed when https://issues.apache.org/jira/browse/FINERACT-826 is fixed
-        'org/joda/time/.*'
-    ]
+springBoot {
+    mainClassName = 'org.apache.fineract.ServerApplication'
 }
 
-compileJava{
-    dependsOn rat
-    dependsOn spotlessCheck
-    finalizedBy resolve
+bootWar {
+    mainClassName = 'org.apache.fineract.ServerApplication'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
-/*
-pmd {
-    sourceSets = [sourceSets.main]
+
+bootJar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
-*/
 
 war {
-    from('../licenses/binary/') { // notice the parens
+    from('../licenses/binary/') {
+        // notice the parens
         into "WEB-INF/licenses/binary/" // no leading slash
     }
-    from('../LICENSE_RELEASE') { // notice the parens
+    from('../LICENSE_RELEASE') {
+        // notice the parens
         into "WEB-INF/" // no leading slash
     }
-    from('../NOTICE_RELEASE') { // notice the parens
+    from('../NOTICE_RELEASE') {
+        // notice the parens
         into "WEB-INF/" // no leading slash
     }
     rename ('LICENSE_RELEASE', 'LICENSE')
     rename ('NOTICE_RELEASE', 'NOTICE')
 
-    from('../DISCLAIMER') { // notice the parens
+    from('../DISCLAIMER') {
+        // notice the parens
         into "WEB-INF/" // no leading slash
     }
     war.finalizedBy(bootWar)
 }
 
-license {
-    header rootProject.file('../APACHE_LICENSETEXT.md')
-    excludes([
-        "**/git.properties",
-        "**/*.html",
-        "**/*.mustache",
-        "**/package-info.java",
-        "**/keystore.jks",
-        "**/static/swagger-ui/**",
-        "**/api-docs/**",
-    ])
-    strictCheck true
-}
-
-task licenseFormatBuildScripts (type:nl.javadude.gradle.plugins.license.License) {
-    source = fileTree(dir: '../', includes: ['**/*.bat', '**/*.sh', '**/*.sql'])
-}
-licenseFormat.dependsOn licenseFormatBuildScripts
-
-configurations
-{
-  tomcat
-}
-
-dependencies {
-  tomcat "org.apache.tomcat:tomcat:9.0.36@zip"
-}
-
-dependencies {
-    errorprone "com.google.errorprone:error_prone_core:2.4.0"
-}
-cargo {
-  containerId "tomcat9x"
-
-  local {
-    installer {
-      installConfiguration = configurations.tomcat
-      downloadDir = file("$buildDir/download")
-      extractDir = file("$buildDir/tomcat")
-    }
-    startStopTimeout = 240000
-    containerProperties {
-      property 'cargo.tomcat.connector.keystoreFile', file('src/main/resources/keystore.jks')
-      property 'cargo.tomcat.connector.keystorePass', 'openmf'
-      property 'cargo.tomcat.httpSecure', true
-      property 'cargo.tomcat.connector.sslProtocol', 'TLS'
-      property 'cargo.tomcat.connector.clientAuth', false
-      property 'cargo.protocol', 'https'
-      property 'cargo.servlet.port', 8443
-    }
-  }
-}
-
-cargoRunLocal.dependsOn bootWar
-cargoStartLocal.dependsOn bootWar
-cargoStartLocal.mustRunAfter "integrationTestClasses"
-cargoStartLocal.mustRunAfter "enhance"
-cargoStartLocal.mustRunAfter "resolve"
+//
+// CONFIGURATION FOR TEST TASKS
+//
 
 /* http://stackoverflow.com/questions/19653311/jpa-repository-works-in-idea-and-production-but-not-in-gradle */
 sourceSets.main.output.resourcesDir = sourceSets.main.java.outputDir
 sourceSets.test.output.resourcesDir = sourceSets.test.java.outputDir
 
-/* Exclude maria db related files for non dev builds */
-if (!(project.hasProperty('env') && project.getProperty('env') == 'dev')) {
-    sourceSets {
-        main {
-            java {
-                exclude '**/ServerWithMariaDB*'
-                exclude '**/MariaDB4j*'
-            }
-        }
-        test {
-            java {
-                exclude '**/core/boot/tests/**'
-            }
-        }
-    }
-}
-
 sourceSets {
- integrationTest {
+    integrationTest {
         compileClasspath += main.output + test.output
         runtimeClasspath += main.output + test.output
     }
@@ -677,7 +466,8 @@ task integrationTest(type:Test) {
 
 integrationTest {
     useJUnitPlatform()
-    testLogging { // FINERACT-927
+    testLogging {
+        // FINERACT-927
         events "skipped", "failed"
         showStandardStreams = false
         exceptionFormat "full"
@@ -685,32 +475,33 @@ integrationTest {
 }
 test {
     useJUnitPlatform()
-    testLogging { // FINERACT-927
+    testLogging {
+        // FINERACT-927
         events "skipped", "failed"
         showStandardStreams = false
         exceptionFormat "full"
     }
 }
 
-
+//
+// CONFIGURATION FOR DATABASE MANIPULATION
+//
 import groovy.sql.Sql
 
-repositories {
-    mavenCentral()
-}
 configurations {
     driver
 }
 dependencies {
     driver 'org.drizzle.jdbc:drizzle-jdbc:1.4'
-    checkstyle 'com.puppycrawl.tools:checkstyle:8.34'
-    checkstyle 'com.github.sevntu-checkstyle:sevntu-checks:1.37.1'
 }
 
 URLClassLoader loader = GroovyObject.class.classLoader
 configurations.driver.each {File file ->
     loader.addURL(file.toURL())
 }
+
+project.ext.mysqlUser='root'
+project.ext.mysqlPassword='mysql'
 
 task createDB {
     description= "Creates the Database. Needs database name to be passed (like: -PdbName=someDBname)"
@@ -727,6 +518,7 @@ task dropDB {
         sql.execute( 'DROP DATABASE '+"`$dbName`")
     }
 }
+
 task setBlankPassword {
     doLast {
         def sql = Sql.newInstance( 'jdbc:mysql:thin://localhost:3306/', mysqlUser, mysqlPassword, 'org.drizzle.jdbc.DrizzleDriver' )
@@ -735,18 +527,304 @@ task setBlankPassword {
     }
 }
 
-springBoot {
-    mainClassName = 'org.apache.fineract.ServerApplication'
+//
+// CONFIGURATION FOR BUILDING WITHIN ECLIPSE
+//
+
+// If we are running Gradle within Eclipse to enhance classes with OpenJPA,
+// set the classes directory to point to Eclipse's default build directory
+if (project.hasProperty('env') && project.getProperty('env') == 'eclipse')
+{
+    sourceSets.main.java.outputDir = new File(rootProject.projectDir, "bin/main")
 }
 
-bootWar {
-    mainClassName = 'org.apache.fineract.ServerApplication'
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+eclipse
+{
+    project {
+        buildCommand([ LaunchConfigHandle: "<project>/.externalToolBuilders/OpenJPA Enhance Builder.launch" ],  'org.eclipse.ui.externaltools.ExternalToolBuilder')
+    }
 }
 
-bootJar {
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+//
+// CONFIGURATIONS FOR SPECIFIC PLUGINS
+//
+
+// Configuration for the OpenJPA enhance task
+// https://github.com/radcortez/openjpa-gradle-plugin
+System.setProperty("openjpa.Log", "commons")
+
+openjpa {
+    includes = [
+        '**/AbstractPersistableCustom.class',
+        '**/domain/*.class'
+    ]
+    enhance {
+        enforcePropertyRestrictions true
+    }
 }
+
+// Configuration for the Checkstyle plugin
+//
+dependencies {
+    checkstyle 'com.puppycrawl.tools:checkstyle:8.34'
+    checkstyle 'com.github.sevntu-checkstyle:sevntu-checks:1.37.1'
+}
+
+// Configuration for Swagger documentation generation task
+// https://github.com/swagger-api/swagger-core/tree/master/modules/swagger-gradle-plugin
+resolve {
+    logging.captureStandardOutput LogLevel.INFO
+    outputFileName = 'fineract'
+    outputFormat = 'JSON'
+    prettyPrint = 'TRUE'
+    classpath = sourceSets.main.runtimeClasspath
+    outputDir = file("${buildDir}/classes/java/main/static/swagger-ui")
+}
+
+// Configuration for JaCoCo code coverage task
+// https://www.eclemma.org/jacoco/
+jacoco {
+    toolVersion = jacocoVersion
+    reportsDir = file("$buildDir/reports/jacoco")
+}
+
+jacocoTestReport {
+    reports {
+        html.enabled=true
+        xml.enabled=true
+        html.destination file("${buildDir}/code-coverage")
+    }
+}
+
+// Configuration for the spotless plugin
+// https://github.com/diffplug/spotless/tree/main/plugin-gradle
+spotless {
+    format 'misc', {
+        target '**/*.md', '**/*.properties', '**/.gitignore', '**/*.yml', '**/*.xml', '**/**.json', '**/*.sql'
+        targetExclude '**/build/**', '**/bin/**', '**/.settings/**','**/.idea/**'
+        indentWithSpaces(4)
+        endWithNewline()
+        trimTrailingWhitespace()
+    }
+    groovyGradle {
+        target '*.gradle', '**/*.gradle'
+        greclipse()
+        indentWithSpaces(4)
+        endWithNewline()
+        trimTrailingWhitespace()
+    }
+    java {
+        importOrder() //sort imports alphabetically
+        removeUnusedImports()
+        eclipse().configFile '../config/fineractdev-formatter.xml'
+        endWithNewline()
+        trimTrailingWhitespace()
+
+        // Enforce style modifier order
+        custom 'Modifier ordering', {
+            def modifierRanking = [
+                public      : 1,
+                protected   : 2,
+                private     : 3,
+                abstract    : 4,
+                default     : 5,
+                static      : 6,
+                final       : 7,
+                transient   : 8,
+                volatile    : 9,
+                synchronized: 10,
+                native      : 11,
+                strictfp    : 12]
+            // Find any instance of multiple modifiers. Lead with a non-word character to avoid
+            // accidental matching against for instance, "an alternative default value"
+            it.replaceAll(/\W(?:public |protected |private |abstract |default |static |final |transient |volatile |synchronized |native |strictfp ){2,}/, {
+                // Do not replace the leading non-word character.  Identify the modifiers
+                it.replaceAll(/(?:public |protected |private |abstract |default |static |final |transient |volatile |synchronized |native |strictfp ){2,}/, {
+                    // Sort the modifiers according to the ranking above
+                    it.split().sort({ modifierRanking[it] }).join(' ') + ' '
+                }
+                )
+            }
+            )
+        }
+        lineEndings 'UNIX'
+    }
+}
+
+// Configuration for Apache Release Audit Tool task
+// https://github.com/eskatos/creadur-rat-gradle
+rat {
+    verbose = false
+    reportDir = new File(buildDir,'reports/rat')
+    excludes = [
+        '**/*.launch',
+        '**/licenses/**',
+        '**/*.md',
+        '**/*.github/**',
+        '**/MANIFEST.MF',
+        '**/*.json',
+        '**/*.txt',
+        '**/*.log',
+        '**/fineractdev-eclipse-preferences.epf',
+        '**/template-expected.html',
+        '**/template.mustache',
+        '**/.classpath',
+        '**/.project',
+        '**/.idea/**',
+        '**/*.ipr',
+        '**/*.iws',
+        '**/.settings/**',
+        '**/bin/**',
+        '**/.git/**',
+        '**/.gitignore',
+        '**/.gitkeep',
+        '**/*.iml',
+        //Notice files
+        '**/NOTICE_RELEASE',
+        '**/NOTICE_SOURCE',
+        // Swagger License
+        '**/src/main/resources/static/swagger-ui/**',
+        // gradle
+        '**/.gradle/**',
+        '**/gradlew',
+        '**/gradlew.bat',
+        '**/gradle/wrapper/gradle-wrapper.properties',
+        '**/caches/**',
+        '**/daemon/**',
+        '**/native/**',
+        '**/wrapper/**',
+        '**/build/**',
+        //Api Docs
+        '**/api-docs/*.*',
+        '**/docs/system-architecture/.htaccess',
+        '**/docs/system-architecture/404.html',
+        '**/docs/system-architecture/index.html',
+        '**/docs/system-architecture/**/*.xml',
+        '**/bootstrap-3.0.0/assets/application.js',
+        '**/system-architecture/js/plugins.js',
+        //Apache License
+        '**/bootstrap-3.0.0/assets/less.js',
+        '**/css/bootstrap-3.0.0/**/*.*',
+        //Public Domain See http://www.JSON.org/js.html
+        '**/bootstrap-3.0.0/assets/json2.js.htm',
+        // MIT License
+        '**/modernizr-2.6.2.min.js',
+        '**/css/normalize.css',
+        '**/assets/filesaver.js',
+        '**/css/fonts/glyphicons-halflings-regular.svg',
+        '**/assets/jszip.js',
+        '**/assets/jquery.js',
+        '**/api-docs/jquery-1.7.min.js',
+        '**/css/toc-0.1.2/**/*.*',
+        '**/docs/system-architecture/css/main.css',
+        '**/system-architecture/js/vendor/jquery-1.9.1.min.js',
+        '**/system-architecture/js/vendor/toc-0.1.2/jquery.toc.min.js',
+        '**/assets/respond.min.js',
+        '**/assets/html5shiv.js',
+        //BSD License
+        '**/assets/uglify.js',
+        //Ignore out folder
+        '**/out/**',
+        // Git build info
+        "**/git.properties",
+    ]
+}
+
+// Configuration for the modernizer plugin
+// https://github.com/andygoossens/gradle-modernizer-plugin
+modernizer {
+    includeTestClasses = true
+    failOnViolations = true
+
+    violationLogLevel="error"
+
+    javaVersion = project.targetCompatibility
+
+    ignorePackages = []
+    ignoreClassNamePatterns = [
+        '.*AbstractPersistableCustom',
+        '.*EntityTables'
+    ]
+    ignoreGeneratedClasses = true
+
+    exclusions = []
+    exclusionPatterns = [
+        // To be removed when https://issues.apache.org/jira/browse/FINERACT-826 is fixed
+        'org/joda/time/.*'
+    ]
+}
+
+// Configuration for Gradle license plug-in
+// https://github.com/hierynomus/license-gradle-plugin
+license {
+    header rootProject.file('../APACHE_LICENSETEXT.md')
+    excludes([
+        "**/git.properties",
+        "**/*.html",
+        "**/*.mustache",
+        "**/package-info.java",
+        "**/keystore.jks",
+        "**/static/swagger-ui/**",
+        "**/api-docs/**",
+    ])
+    strictCheck true
+}
+
+task licenseFormatBuildScripts (type:nl.javadude.gradle.plugins.license.License) {
+    source = fileTree(dir: '../', includes: [
+        '**/*.bat',
+        '**/*.sh',
+        '**/*.sql'
+    ])
+}
+licenseFormat.dependsOn licenseFormatBuildScripts
+
+// Configuration for the errorprone plugin
+// https://github.com/tbroyer/gradle-errorprone-plugin
+dependencies {
+    errorprone "com.google.errorprone:error_prone_core:2.4.0"
+}
+
+// Configuration for the Gradle Cargo plugin
+// https://github.com/bmuschko/gradle-cargo-plugin
+configurations {
+    tomcat
+}
+
+dependencies {
+    tomcat "org.apache.tomcat:tomcat:9.0.36@zip"
+}
+
+cargo {
+    containerId "tomcat9x"
+
+    local {
+        installer {
+            installConfiguration = configurations.tomcat
+            downloadDir = file("$buildDir/download")
+            extractDir = file("$buildDir/tomcat")
+        }
+        startStopTimeout = 240000
+        containerProperties {
+            property 'cargo.tomcat.connector.keystoreFile', file('src/main/resources/keystore.jks')
+            property 'cargo.tomcat.connector.keystorePass', 'openmf'
+            property 'cargo.tomcat.httpSecure', true
+            property 'cargo.tomcat.connector.sslProtocol', 'TLS'
+            property 'cargo.tomcat.connector.clientAuth', false
+            property 'cargo.protocol', 'https'
+            property 'cargo.servlet.port', 8443
+        }
+    }
+}
+
+cargoRunLocal.dependsOn bootWar
+cargoStartLocal.dependsOn bootWar
+cargoStartLocal.mustRunAfter "integrationTestClasses"
+cargoStartLocal.mustRunAfter "enhance"
+cargoStartLocal.mustRunAfter "resolve"
+
+// Configuration for spotbugs plugin
+// https://github.com/spotbugs/spotbugs-gradle-plugin
 
 // To generate an HTML report instead of XML
 spotbugs {
@@ -779,6 +857,8 @@ spotbugsIntegrationTest {
     }
 }
 
+// Configuration for git properties gradle plugin
+// https://github.com/n0mer/gradle-git-properties
 gitProperties {
     gitPropertiesResourceDir = "$buildDir/classes/java/main/resources"
     dateFormat = "yyyy-MM-dd'T'HH:mmZ"
