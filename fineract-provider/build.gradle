@@ -157,8 +157,8 @@ configurations {
     driver
 }
 dependencies {
-    driver 'org.mariadb.jdbc:mariadb-java-client:2.7.5'
-    driver 'org.postgresql:postgresql:42.3.3'
+    driver 'org.mariadb.jdbc:mariadb-java-client:2.7.12'
+    driver 'org.postgresql:postgresql:42.7.4'
 }
 
 URLClassLoader loader = GroovyObject.class.classLoader
@@ -212,8 +212,8 @@ bootRun {
     ]
 
     dependencies {
-        implementation 'org.mariadb.jdbc:mariadb-java-client:2.7.5'
-        implementation 'org.postgresql:postgresql:42.3.3'
+        implementation 'org.mariadb.jdbc:mariadb-java-client:2.7.12'
+        implementation 'org.postgresql:postgresql:42.7.4'
     }
 
     classpath += files("build/generated/swagger-ui")
@@ -292,8 +292,8 @@ jib {
     allowInsecureRegistries = true
 
     dependencies {
-        implementation 'org.mariadb.jdbc:mariadb-java-client:2.7.5'
-        implementation 'org.postgresql:postgresql:42.3.3'
+        implementation 'org.mariadb.jdbc:mariadb-java-client:2.7.12'
+        implementation 'org.postgresql:postgresql:42.7.4'
     }
 
     extraDirectories {
