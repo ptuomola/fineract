@@ -10,7 +10,7 @@ jobs:
 
     services:
         mariad:
-            image: mariadb:11.5
+            image: mariadb:11.8
             ports:
                 - 3306:3306
             env:
@@ -18,7 +18,7 @@ jobs:
             options: --health-cmd="healthcheck.sh --su-mysql --connect --innodb_initialized" --health-interval=5s --health-timeout=2s --health-retries=3
 
         mock-oauth2-server:
-          image: ghcr.io/navikt/mock-oauth2-server:2.1.10
+          image: ghcr.io/navikt/mock-oauth2-server:2.3.0
           ports:
             - 9000:9000
           env:
@@ -44,7 +44,7 @@ jobs:
       - name: Congfigure vega-cli
         run: npm i -g vega-cli --unsafe
       - name: Setup Gradle and Validate Wrapper
-        uses: gradle/actions/setup-gradle@0bdd871935719febd78681f197cd39af5b6e16a6 # v4.2.2
+        uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
         with:
           validate-wrappers: true
       - name: Verify MariaDB connection
