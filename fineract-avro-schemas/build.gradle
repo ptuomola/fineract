@@ -127,6 +127,6 @@ tasks.named('sourcesJar') {
 // so keep this module's test stack on the JUnit 5 line
 dependencyManagement {
     imports {
-        mavenBom 'org.junit:junit-bom:5.14.4'
+        mavenBom 'org.junit:junit-bom:5.14.5'
     }
 }
